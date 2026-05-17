@@ -97,3 +97,29 @@ GPIOA_MODER bits [11:10] = 01   ← PA5 = Output mode
  │  delay(500000)           │  ← NOP software delay
  └──────────────┬───────────┘
                 └─ repeat
+```
+**Why use GPIOA_ODR XOR instead of separate SET/CLEAR?** <br>
+
+Using `ODR ^= Pin` works perfectly fine if you just need a quick-and-dirty toggle. However, in production code—especially inside an Interrupt Service Routine (ISR) or a multi-threaded RTOS—you should use `GPIOA_BSRR` (Bit Set/Reset Register) instead.
+
+`BSRR` allows for **atomic** bit manipulation. Because `ODR` modification requires a read-modify-write cycle, it is prone to race conditions if an interrupt hits right in the middle of the operation. `BSRR` avoids this entirely at the hardware level.
+
+**Why register pointers require `volatile`** <br>
+
+```c
+// WITHOUT volatile:
+unsigned int *reg = (unsigned int *)0x50001000;
+*reg = 1;
+*reg = 2;    // Compiler may eliminate the first write
+
+// WITH volatile:
+volatile unsigned int *reg = (volatile unsigned int *)0x50001000;
+*reg = 1;
+*reg = 2;    // Compiler MUST emit both writes
+```
+The `volatile` keyword prevents the compiler from optimizing your code into oblivion. Without it, the compiler assumes a variable only changes when the software explicitly modifies it, leading it to cache the value in a CPU register for efficiency.
+
+Because memory-mapped hardware registers can change independently of your code (via hardware events, ISRs, or DMA), `volatile` forces the CPU to perform an actual read or write operation every single time the register is accessed.
+
+**Clock Gating: Enable the clock first:**
+To save power, STM32 chips keep all peripherals completely powered down (clock-gated) by default. If you try to write to a GPIO register before enabling its clock in `RCC_IOPENR`, the hardware simply ignores the write because it has no clock signal to process the instruction. Forgetting to turn on the peripheral clock is easily the most common pitfall when starting out with bare-metal programming.
