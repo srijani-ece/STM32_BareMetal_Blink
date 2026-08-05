@@ -1,125 +1,123 @@
-**Problem:**
-Every embedded tutorial starts with HAL_GPIO_TogglePin(). That single function
-call hides four layers of abstraction like clock trees, register offsets, bit masking,
-and peripheral enable logic. When something breaks in production, you need to know
-exactly which bit in which register to flip. This project strips everything away and
-talks directly to the hardware.
-<BR>
-<br>
-**Solution:**
-Blink the onboard LED (PA5) on an **ST Nucleo-C031C6** by writing directly to the
-STM32C031C6's memory-mapped I/O registers which means no HAL, no CMSIS GPIO functions,
-no vendor libraries. Three registers. Thirty lines of C.
-<br>
-<br>
-**Hardware:**
-Board - <i>ST Nucleo-C031C6</i>
-<br>
-MCU - <i>STM32C031C6 (ARM Cortex-M0+ @ 48 MHz)</i>
-<br>
-LED - <i>LD4 — onboard, connected to **PA5**</i>
-<br>
-Simulation - <i>Wokwi(https://www.wokwi.com) template</i>
-<br>
-<br>
-**Registers Used**
+# STM32 Bare-Metal Blink — No HAL, No CMSIS, From Boot to Blink
+
+**Problem:** Every embedded tutorial starts with `HAL_GPIO_TogglePin()`. That
+single function call hides four layers of abstraction — clock trees,
+register offsets, bit masking, and peripheral enable logic — AND it hides
+an even bigger thing: how the chip got from "power applied" to "your
+code is running" at all. This project doesn't skip that part.
+
+**Solution:** A complete, from-scratch boot chain for an
+**ST Nucleo-C031C6** (STM32C031C6, ARM Cortex-M0+ @ 48 MHz):
+a real vector table, a real `Reset_Handler`, a real linker script — and
+then, at the very end of all that, a blinking LED on PA5.
+
+## The simple version — what actually happens when you power on the chip
+
+Imagine the microcontroller as a brand new employee showing up for their
+first day with total amnesia — no idea what building they're in, what
+their desk looks like, or what their job is. Here's the onboarding, in
+order:
+
+1. **The chip wakes up and looks at address 0.** Hardwired into the
+   silicon: "check address 0 for my instructions." That's the
+   **vector table** (`startup.c`) — literally the first thing in Flash
+   memory (enforced by `linker.ld`). It contains two things: where the
+   stack (scratch space) starts, and where to jump to first.
+
+2. **`Reset_Handler` runs.** This is the "new employee onboarding."
+   Before your actual program can safely touch any variable, two things
+   have to happen:
+   - Any global variable that starts with a real value
+     (`int x = 5;`) needs that `5` copied from Flash into RAM, because
+     RAM is empty/garbage on power-up.
+   - Any global variable with no starting value (`int counter;`) needs
+     to be zeroed out, because C guarantees these start at 0, and RAM
+     is full of leftover garbage bits from nothing in particular.
+
+3. **`main()` finally runs.** Only now is it safe to run real code —
+   which in this project means: turn on the GPIOA clock, configure
+   PA5 as an output, and blink it forever.
+
+Every single-file "blink" tutorial online skips steps 1 and 2 entirely,
+because a vendor HAL or CMSIS startup file does it silently for you.
+This project makes all of it visible and hand-written.
+
+## Files
+
+| File | What it does |
+|---|---|
+| `linker.ld` | Memory map: tells the toolchain where Flash and RAM live, and exactly where the vector table must sit |
+| `startup.c` | Vector table + `Reset_Handler` — the code that runs before `main()` |
+| `main.c` | The actual blink logic — direct register writes, no HAL |
+| `Makefile` | Builds everything into a flashable `.bin` / `.elf` |
+
+## Registers used
 
 | Register | Address | Purpose |
-| :--- | :--- | :--- |
+|---|---|---|
 | `RCC_IOPENR` | `0x40021000 + 0x34` | Enable clock for GPIOA (bit 0) |
-| `GPIOA_MODER` | `0x50000000 + 0x00` | Set PA5 as General Purpose Output (bits 11:10 = 01) |
+| `GPIOA_MODER` | `0x50000000 + 0x00` | Set PA5 as output (bits 11:10 = 01) |
 | `GPIOA_ODR` | `0x50000000 + 0x14` | Toggle PA5 output state (bit 5) |
 
-> **Note:** STM32C031C6 uses `RCC_IOPENR` (not `RCC_AHB1ENR` which is an F4-series register). 
-> GPIOA base address is `0x50000000` on C0-series — different from F1/F4 families.
->
+> STM32C031C6 uses `RCC_IOPENR` (not `RCC_AHB1ENR`, which is an F4-series
+> register), and GPIOA's base address is `0x50000000` on C0-series chips
+> — different from the F1/F4 families most tutorials assume.
 
-<br>
+## How to build it
 
-**Implementation**
+You need the ARM GNU toolchain (`arm-none-eabi-gcc`), which isn't
+installed in every environment by default:
 
-```c
-// ─── Register Definitions (STM32C031C6 specific) ────────────────────────────
-#define RCC_BASE      0x40021000UL
-#define GPIOA_BASE    0x50000000UL
+```bash
+# Debian/Ubuntu
+sudo apt install gcc-arm-none-eabi
 
-#define RCC_IOPENR    (*(volatile unsigned int *)(RCC_BASE  + 0x34))
-#define GPIOA_MODER   (*(volatile unsigned int *)(GPIOA_BASE + 0x00))
-#define GPIOA_ODR     (*(volatile unsigned int *)(GPIOA_BASE + 0x14))
-
-// ─── Software Delay ─────────────────────────────────────────────────────────
-// volatile loop counter prevents compiler from optimising this away at -O2
-void delay(volatile int count) {
-    while (count--) {
-        __asm__("nop");   // ARM No-Operation — one cycle, never optimised out
-    }
-}
-
-// ─── Main ───────────────────────────────────────────────────────────────────
-int main(void) {
-
-    // Step 1: Enable peripheral clock for GPIOA
-    // RCC_IOPENR bit 0 = GPIOAEN. Peripherals are clock-gated by default.
-    // Without this, all GPIOA register writes are silently ignored.
-    RCC_IOPENR |= (1 << 0);
-
-    // Step 2: Configure PA5 as General Purpose Output
-    // MODER register: 2 bits per pin. Bits [11:10] control PA5.
-    // 00 = Input, 01 = Output, 10 = Alternate Function, 11 = Analog
-    GPIOA_MODER &= ~(3U << 10);   // Clear bits 11:10 (avoid leaving invalid state)
-    GPIOA_MODER |=  (1U << 10);   // Set bits 11:10 = 01 (Output)
-
-    // Step 3: Blink loop
-    while (1) {
-        GPIOA_ODR ^= (1U << 5);   // XOR toggle PA5
-        delay(500000);             // ~500ms at 48MHz with NOP delay
-    }
-}
+# then, from this project folder:
+make
 ```
-<br>
 
-**Architecture**
-<br>
+This produces `blink.elf` (for debugging/simulation) and `blink.bin`
+(the raw binary you'd flash to real hardware).
 
-```text
-Power-On Reset
-      |
-      ▼
-RCC_IOPENR |= (1 << 0)          ← Enable GPIOA clock gate
-      |
-      ▼
-GPIOA_MODER bits [11:10] = 01   ← PA5 = Output mode
-      |
-      ▼
- ┌──────────────────────────┐
- │  Infinite Loop           │
- │  GPIOA_ODR ^= bit5       │  ← Toggle PA5 (XOR — atomic bit flip)
- │  delay(500000)           │  ← NOP software delay
- └──────────────┬───────────┘
-                └─ repeat
-```
-**Why use GPIOA_ODR XOR instead of separate SET/CLEAR?** <br>
+> **Note:** this Makefile and linker script were written and reviewed
+> for correctness but not yet compiled on real hardware or in Wokwi —
+> `arm-none-eabi-gcc` wasn't available in the environment they were
+> written in. Build it locally and fix forward if the toolchain flags
+> a mismatch; the logic (vector table layout, `.data`/`.bss` copy,
+> linker sections) follows the standard Cortex-M boot pattern.
 
-Using `ODR ^= Pin` works perfectly fine if you just need a quick-and-dirty toggle. However, in production code—especially inside an Interrupt Service Routine (ISR) or a multi-threaded RTOS—you should use `GPIOA_BSRR` (Bit Set/Reset Register) instead.
+## Why `ODR ^=` instead of `BSRR`?
 
-`BSRR` allows for **atomic** bit manipulation. Because `ODR` modification requires a read-modify-write cycle, it is prone to race conditions if an interrupt hits right in the middle of the operation. `BSRR` avoids this entirely at the hardware level.
+`GPIOA_ODR ^= (1 << 5)` works fine for a simple polling loop like this
+one. But in production code — especially inside an interrupt handler or
+alongside an RTOS — you should use `GPIOA_BSRR` (Bit Set/Reset Register)
+instead. `ODR` requires a read-modify-write cycle, which can race with
+an interrupt that also touches `ODR` mid-operation. `BSRR` sets or clears
+individual bits atomically at the hardware level, with no race window.
 
-**Why register pointers require `volatile`** <br>
+## Why register pointers need `volatile`
 
 ```c
 // WITHOUT volatile:
 unsigned int *reg = (unsigned int *)0x50001000;
 *reg = 1;
-*reg = 2;    // Compiler may eliminate the first write
+*reg = 2;    // compiler may delete the first write — "why write twice
+             //  to a variable nothing else reads in between?"
 
 // WITH volatile:
 volatile unsigned int *reg = (volatile unsigned int *)0x50001000;
 *reg = 1;
-*reg = 2;    // Compiler MUST emit both writes
+*reg = 2;    // compiler MUST emit both writes
 ```
-The `volatile` keyword prevents the compiler from optimizing your code into oblivion. Without it, the compiler assumes a variable only changes when the software explicitly modifies it, leading it to cache the value in a CPU register for efficiency.
 
-Because memory-mapped hardware registers can change independently of your code (via hardware events, ISRs, or DMA), `volatile` forces the CPU to perform an actual read or write operation every single time the register is accessed.
+Hardware registers can change independent of your code (interrupts,
+DMA, the physical world). `volatile` tells the compiler "don't assume
+you know better — actually perform this read/write every time."
 
-**Clock Gating: Enable the clock first:**
-To save power, STM32 chips keep all peripherals completely powered down (clock-gated) by default. If you try to write to a GPIO register before enabling its clock in `RCC_IOPENR`, the hardware simply ignores the write because it has no clock signal to process the instruction. Forgetting to turn on the peripheral clock is easily the most common pitfall when starting out with bare-metal programming.
+## What I'd add next
+
+- Wire this up in the Wokwi simulator so it's runnable without physical
+  hardware
+- Replace the NOP busy-wait delay with a SysTick-timer-based delay
+- Add GPIOA interrupt handling (EXTI) as a second example, to exercise
+  the vector table entries beyond Reset/SysTick
