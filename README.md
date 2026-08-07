@@ -125,6 +125,10 @@ you know better — actually perform this read/write every time."
 
 - Wire this up in the Wokwi simulator so it's runnable without physical
   hardware
-- Replace the NOP busy-wait delay with a SysTick-timer-based delay
+- Replace the NOP busy-wait delay with a SysTick-timer-based delay (DONE/UPDATED)
 - Add GPIOA interrupt handling (EXTI) as a second example, to exercise
   the vector table entries beyond Reset/SysTick
+
+## 🧠 Technical Notes & Lessons Learned
+**Hardware Timer vs. NOP Loop:** I initially estimated the LED blink timing using a `NOP` loop based on the chip's maximum 48 MHz clock speed. However, I caught that the STM32C0 actually boots at `HSISYS / 4` (12 MHz) by default out of reset. Instead of hand-tuning and guessing the `NOP` instruction cycles, I refactored the delay to use the deterministic Cortex-M0+ `SysTick` hardware timer.
+**Power Efficiency:** The `delay_ms()` function utilizes the `WFI` (Wait For Interrupt) assembly instruction, putting the CPU core to sleep between ticks rather than burning battery cycles in a busy-wait loop.
