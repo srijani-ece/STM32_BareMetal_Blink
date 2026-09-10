@@ -82,19 +82,16 @@ This produces `blink.elf` (for debugging/simulation) and `blink.bin`
 > Confirmed via `objdump -h blink.elf`:
 > - `.isr_vector` sits at `0x08000000` (start of Flash), 0x40 bytes = 16
 >   entries — exactly matches the vector table defined in `startup.c`
-> - `.text` begins immediately at `0x08000040` with zero padding
-> - `blink.bin` is 260 bytes — exactly `.isr_vector` (64B) + `.text`
->   (196B), byte-for-byte accounted for
+> - `.text begins immediately at 0x08000040 with zero padding
+blink.bin is 296 bytes — exactly .isr_vector (64B) + .text (232B), byte-for-byte accounted for (grew from 260B after adding SysTick timing and WFI power-saving — see Technical Notes below),
 > - Disassembly of `Reset_Handler` confirms the `.data` copy loop
 >   compiles to the expected `ldr`/`str`/`cmp`/`bne` sequence (this
->   project has no initialized globals, so the loop correctly does
+>   project has no initialised globals, so the loop correctly does
 >   nothing at runtime — proof the logic is conditionally correct, not
 >   just present)
 
 ## Build output:
-BUILD OUTPUT: `blink.elf` (debug/simulation) and `blink.bin` (260 bytes, flashable) — see verification details above.
-<img width="819" height="460" alt="objdump-verification" src="https://github.com/user-attachments/assets/bd07ef7a-6b72-4df5-90af-11b42fac34be" />
-## UPDATED OUTPUT: 
+BUILD OUTPUT: 
 <img width="819" height="460" alt="updatedobjdump-verification" src="https://github.com/user-attachments/assets/3f5ad21d-a8e4-4a24-94be-42dcaf053def" />
 
 ## Why `ODR ^=` instead of `BSRR`?
