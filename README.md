@@ -1,4 +1,4 @@
-# STM32 Bare-Metal Blink — No HAL, No CMSIS, From Boot to Blink
+# STM32 Bare-Metal Blink: No HAL, No CMSIS, From Boot to Blink
 
 **Problem:** Every embedded tutorial starts with `HAL_GPIO_TogglePin()`. That
 single function call hides four layers of abstraction — clock trees,
@@ -7,13 +7,13 @@ an even bigger thing: how the chip got from "power applied" to "your
 code is running" at all. This project doesn't skip that part.
 **Solution:** A complete, from-scratch boot chain for an
 **ST Nucleo-C031C6** (STM32C031C6, ARM Cortex-M0+ @ 48 MHz):
-a real vector table, a real `Reset_Handler`, a real linker script — and
+a real vector table, a real `Reset_Handler`, a real linker script and
 then, at the very end of all that, a blinking LED on PA5.
 
-## The simple version — what actually happens when you power on the chip
+## What actually happens when you power on the chip:
 
 Imagine the microcontroller as a brand new employee showing up for their
-first day with total amnesia — no idea what building they're in, what
+first day with total amnesia, no idea what building they're in, what
 their desk looks like, or what their job is. Here's the onboarding, in
 order:
 
@@ -93,6 +93,8 @@ This produces `blink.elf` (for debugging/simulation) and `blink.bin`
 
 ## Build output:
 BUILD OUTPUT: `blink.elf` (debug/simulation) and `blink.bin` (260 bytes, flashable) — see verification details above.
+<img width="819" height="460" alt="objdump-verification" src="https://github.com/user-attachments/assets/bd07ef7a-6b72-4df5-90af-11b42fac34be" />
+
 ## Why `ODR ^=` instead of `BSRR`?
 
 `GPIOA_ODR ^= (1 << 5)` works fine for a simple polling loop like this
