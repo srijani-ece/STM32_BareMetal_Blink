@@ -82,8 +82,8 @@ This produces `blink.elf` (for debugging/simulation) and `blink.bin`
 > Confirmed via `objdump -h blink.elf`:
 > - `.isr_vector` sits at `0x08000000` (start of Flash), 0x40 bytes = 16
 >   entries — exactly matches the vector table defined in `startup.c`
-> - `.text begins immediately at 0x08000040 with zero padding
-blink.bin is 296 bytes — exactly .isr_vector (64B) + .text (232B), byte-for-byte accounted for (grew from 260B after adding SysTick timing and WFI power-saving — see Technical Notes below),
+> - .text begins immediately at 0x08000040 with zero padding
+> - blink.bin is 296 bytes — exactly .isr_vector (64B) + .text (232B), byte-for-byte accounted for (grew from 260B after adding SysTick timing and WFI power-saving — see Technical Notes below),
 > - Disassembly of `Reset_Handler` confirms the `.data` copy loop
 >   compiles to the expected `ldr`/`str`/`cmp`/`bne` sequence (this
 >   project has no initialised globals, so the loop correctly does
