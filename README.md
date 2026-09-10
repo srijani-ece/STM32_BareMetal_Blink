@@ -94,6 +94,8 @@ This produces `blink.elf` (for debugging/simulation) and `blink.bin`
 ## Build output:
 BUILD OUTPUT: `blink.elf` (debug/simulation) and `blink.bin` (260 bytes, flashable) — see verification details above.
 <img width="819" height="460" alt="objdump-verification" src="https://github.com/user-attachments/assets/bd07ef7a-6b72-4df5-90af-11b42fac34be" />
+## UPDATED OUTPUT: 
+<img width="819" height="460" alt="updatedobjdump-verification" src="https://github.com/user-attachments/assets/3f5ad21d-a8e4-4a24-94be-42dcaf053def" />
 
 ## Why `ODR ^=` instead of `BSRR`?
 
@@ -132,6 +134,8 @@ you know better — actually perform this read/write every time."
   the vector table entries beyond Reset/SysTick
 
 ## Technical Notes & Lessons Learned
-**Hardware Timer vs. NOP Loop:** I initially estimated the LED blink timing using a `NOP` loop based on the chip's maximum 48 MHz clock speed. However, I caught that the STM32C0 actually boots at `HSISYS / 4` (12 MHz) by default out of reset. Instead of hand-tuning and guessing the `NOP` instruction cycles, I refactored the delay to use the deterministic Cortex-M0+ `SysTick` hardware timer.
+**Hardware Timer vs. NOP Loop:** I initially estimated the LED blink timing using a `NOP` loop based on the chip's maximum 48 MHz clock speed. However, I caught that the STM32C0 actually boots at `HSISYS / 4` (12 MHz) by default out of reset. Instead of hand-tuning and guessing the `NOP` instruction cycles, I refactored the delay to use the deterministic Cortex-M0+ `SysTick` hardware timer. 
+
+<img width="819" height="460" alt="wfi_added_verification" src="https://github.com/user-attachments/assets/3c4f672f-3630-4610-bcce-74180dd56aca" />
 
 **Power Efficiency:** The `delay_ms()` function utilizes the `WFI` (Wait For Interrupt) assembly instruction, putting the CPU core to sleep between ticks rather than burning battery cycles in a busy-wait loop.
